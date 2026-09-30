@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Secure Code Review — Static Analysis Audit</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div>
+      <h1 class="masthead-title">Secure Code Review</h1>
+      <p class="masthead-sub">A static analysis audit tool. Submit source, and it's checked line by line against a fixed catalog of known-vulnerable patterns — SQL injection, command injection, hardcoded secrets, weak cryptography, and more — with a plain-English fix for each finding.</p>
+    </div>
+    <div class="masthead-right">
+      <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">&#127769;</button>
+      <div class="masthead-meta">
+        Case <b id="caseId">—</b><br>
+        Language <b id="caseLang">Python</b><br>
+        Reviewed <b id="caseTime">not yet run</b>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tab" data-view="overview">Overview</div>
+    <div class="tab active" data-view="workspace">Workspace</div>
+    <div class="tab" data-view="history">Review History</div>
+    <div class="tab" data-view="catalog">Rule Catalog</div>
+  </div>
+
+  <!-- ================= OVERVIEW ================= -->
+  <section class="view" id="view-overview">
+    <div class="section-head">
+      <div>
+        <h2>Audit Overview</h2>
+        <p class="section-lede">Aggregated across every review ever run on this instance — the record a reviewer would keep across a whole engagement, not just one file.</p>
+      </div>
+    </div>
+
+    <div class="overview-grid">
+      <div class="pane stat-pane">
+        <div class="stat-num" id="ovTotalReviews">0</div>
+        <div class="stat-label">Reviews run</div>
+      </div>
+      <div class="pane stat-pane">
+        <div class="stat-num" id="ovTotalFindings">0</div>
+        <div class="stat-label">Findings logged</div>
+      </div>
+      <div class="pane stat-pane">
+        <div class="stat-num" id="ovAvgScore">—</div>
+        <div class="stat-label">Average security score</div>
+      </div>
+      <div class="pane stat-pane">
+        <div class="stat-num" id="ovLangSplit">—</div>
+        <div class="stat-label">Python / JavaScript reviews</div>
+      </div>
+    </div>
+
+    <div class="overview-grid-2">
+      <div class="pane">
+        <div class="pane-head"><h3>Most frequent findings</h3><span class="count">by rule, across all reviews</span></div>
+        <div id="ovTopRules"><div class="empty-row">No reviews yet — run one from the Workspace tab.</div></div>
+      </div>
+      <div class="pane">
+        <div class="pane-head"><h3>Findings by severity, all-time</h3><span class="count" id="ovSevTotal">0 total</span></div>
+        <div style="padding:18px;">
+          <div class="stackbar-track" id="ovStackbar"></div>
+          <div class="stackbar-legend">
+            <span><i class="sw critical"></i> Critical <b id="ovCritical">0</b></span>
+            <span><i class="sw high"></i> High <b id="ovHigh">0</b></span>
+            <span><i class="sw medium"></i> Medium <b id="ovMedium">0</b></span>
+            <span><i class="sw low"></i> Low <b id="ovLow">0</b></span>
+          </div>
+          <p class="summary-sentence" id="ovBestWorst"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane">
+      <div class="pane-head"><h3>Most recent reviews</h3><span class="link-action" data-goto="history">Full history →</span></div>
+      <div class="table-wrap" style="border:none;">
+        <table class="doc-table">
+          <thead><tr><th>Time</th><th>Label</th><th>Language</th><th>Score</th><th>Grade</th><th>Findings</th></tr></thead>
+          <tbody id="ovRecentBody"><tr><td class="empty-row" colspan="6">Nothing reviewed yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= WORKSPACE ================= -->
+  <section class="view active" id="view-workspace">
+
+    <div class="paste-row">
+      <div class="field">
+        <label>Source to review</label>
+        <textarea class="textarea-full" id="codeInput" placeholder="Paste a Python or JavaScript file here, or click &quot;Load sample&quot; to try it on an intentionally vulnerable demo file…"></textarea>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="field">
+        <label>Language</label>
+        <select id="languageSelect">
+          {% for key, lang in languages.items() %}
+          <option value="{{ key }}">{{ lang.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Label (optional)</label>
+        <input type="text" id="labelInput" placeholder="e.g. auth_service.py">
+      </div>
+      <div class="spacer"></div>
+      <button class="btn" id="loadSampleBtn">Load sample</button>
+      <button class="btn btn-primary" id="runReviewBtn">Run review</button>
+    </div>
+    <div class="status-line" id="workspaceStatus"></div>
+
+    <div class="workspace-grid">
+      <div class="pane">
+        <div class="pane-head">
+          <h3>Annotated source</h3>
+          <span class="count" id="lineCount">0 lines</span>
+        </div>
+        <div class="source-scroll" id="sourceView">
+          <div class="empty-source">Run a review to see the source annotated with findings.</div>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="pane-head">
+          <h3>Findings ledger</h3>
+          <span class="count" id="findingCount">0</span>
+        </div>
+        <div class="ledger-scroll" id="ledgerView">
+          <div class="empty-row">No findings yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="summary" id="summaryBox" style="display:none;">
+      <div class="score-block">
+        <div class="score-num" id="scoreNum">—</div>
+        <div class="score-grade" id="scoreGrade">—</div>
+        <div class="score-sub">security score / 100</div>
+      </div>
+      <div>
+        <div class="stackbar-track" id="stackbarTrack"></div>
+        <div class="stackbar-legend">
+          <span><i class="sw critical"></i> Critical <b id="cCritical">0</b></span>
+          <span><i class="sw high"></i> High <b id="cHigh">0</b></span>
+          <span><i class="sw medium"></i> Medium <b id="cMedium">0</b></span>
+          <span><i class="sw low"></i> Low <b id="cLow">0</b></span>
+        </div>
+        <p class="summary-sentence" id="summarySentence"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= REVIEW HISTORY ================= -->
+  <section class="view" id="view-history">
+    <div class="section-head">
+      <div>
+        <h2>Review History</h2>
+        <p class="section-lede">Every review ever run, persisted to disk — a real audit trail, not just today's totals. Click a row to reopen it in the Workspace.</p>
+      </div>
+      <span class="reset-link" id="resetHistoryLink">Reset all data</span>
+    </div>
+    <div class="table-wrap">
+      <table class="doc-table">
+        <thead><tr><th>Time</th><th>Label</th><th>Language</th><th>Score</th><th>Grade</th><th>Findings</th><th></th></tr></thead>
+        <tbody id="historyBody"><tr><td class="empty-row" colspan="7">No reviews yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= RULE CATALOG ================= -->
+  <section class="view" id="view-catalog">
+    <div class="section-head">
+      <div>
+        <h2>Rule Catalog</h2>
+        <p class="section-lede">Every check this tool runs, across both supported languages. Click a row to see the vulnerable pattern next to its fix, the CWE reference, and why it matters.</p>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="doc-table">
+        <thead><tr><th></th><th>Rule ID</th><th>Language</th><th>Title</th><th>Severity</th><th>CWE</th></tr></thead>
+        <tbody>
+          {% for rule in rule_catalog %}
+          <tr class="rule-row" data-idx="{{ loop.index0 }}">
+            <td class="mono dim expand-caret">▸</td>
+            <td class="mono dim">{{ rule.rule_id }}</td>
+            <td>{{ rule.language }}</td>
+            <td><b>{{ rule.title }}</b></td>
+            <td><span class="chip {{ rule.severity }}">{{ rule.severity | upper }}</span></td>
+            <td class="mono dim">{{ rule.cwe }}</td>
+          </tr>
+          <tr class="rule-detail-row" id="rule-detail-{{ loop.index0 }}" style="display:none;">
+            <td colspan="6">
+              <div class="rule-detail">
+                <div class="rule-detail-col">
+                  <div class="rule-detail-label">Vulnerable</div>
+                  <pre class="code-block bad">{{ rule.example_bad }}</pre>
+                </div>
+                <div class="rule-detail-col">
+                  <div class="rule-detail-label">Fixed</div>
+                  <pre class="code-block good">{{ rule.example_good }}</pre>
+                </div>
+                <div class="rule-detail-col rule-detail-notes">
+                  <div class="rule-detail-label">Why it matters</div>
+                  <p>{{ rule.impact }}</p>
+                  <p class="dim">{{ rule.remediation }}</p>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</div>
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
